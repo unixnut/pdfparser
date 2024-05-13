@@ -1,17 +1,6 @@
 <?php
 
 /**
- * This file is based on code of tecnickcom/TCPDF PDF library.
- *
- * Original author Nicola Asuni (info@tecnick.com) and
- * contributors (https://github.com/tecnickcom/TCPDF/graphs/contributors).
- *
- * @see https://github.com/tecnickcom/TCPDF
- *
- * Original code was licensed on the terms of the LGPL v3.
- *
- * ------------------------------------------------------------------------------
- *
  * @file This file is part of the PdfParser library.
  *
  * @author  Alastair Irvine <alastair@plug.org.au>
@@ -42,6 +31,9 @@
 
 namespace Smalot\PdfParser\Encryption;
 
+use Smalot\PdfParser\RawData\RawDataParser;
+
+
 class Info
 {
     protected $docId;
@@ -53,6 +45,7 @@ class Info
     protected $streamFilter = "";
     protected $stringFilter = "";
     protected $cfLength = 0;
+    protected $context = null;
 
 
     function __construct(array $rawMetadata, array $idArr)
@@ -82,15 +75,15 @@ class Info
         }
         foreach ($metadataTranslation as $key => $info) {
             if ($info[1]) {
-                $this->metadata[$key] = (int)\Smalot\PdfParser\RawData\RawDataParser::getHeaderValue($headerDic, $info[0], 'numeric');
+                $this->metadata[$key] = (int)RawDataParser::getHeaderValue($headerDic, $info[0], 'numeric');
             } else {
                 // First look for a raw string
-                $val = \Smalot\PdfParser\RawData\RawDataParser::getHeaderValue($headerDic, $info[0], '(', false);
+                $val = RawDataParser::getHeaderValue($headerDic, $info[0], '(', false);
                 if (false !== $val) {
                     $this->metadata[$key] = $val;
                 } else {
                     // Then look for a hex string
-                    $val = \Smalot\PdfParser\RawData\RawDataParser::getHeaderValue($headerDic, $info[0], '<');
+                    $val = RawDataParser::getHeaderValue($headerDic, $info[0], '<');
                     $this->metadata[$key] = \hex2bin($val);
                 }
             }
@@ -114,7 +107,10 @@ class Info
                     && strlen($this->metadata['ownerKey']) >= 48 && strlen($this->metadata['userKey']) >= 48
                     && is_string($this->metadata['ownerEnc']) && strlen($this->metadata['ownerEnc']) == 32 && is_string($this->metadata['userEnc'])
                     && strlen($this->metadata['userEnc']) == 32)) {
+                // This is a default and might be changed based on various
+                // metadata, not just the version and revision
                 $this->encAlgorithm = 'RC4';
+
                 // revision 2 forces a 40-bit key - some buggy PDF generators
                 // set the Length value incorrectly
                 if ($this->metadata['revision'] == 2 || $this->metadata['length'] == 0) {
@@ -128,9 +124,9 @@ class Info
                 //~ doesn't handle the case where StmF, StrF, and EFF are not all the
                 //~ same)
                 if (($this->metadata['version'] == 4 || $this->metadata['version'] == 5) && ($this->metadata['revision'] == 4 || $this->metadata['revision'] == 5 || $this->metadata['revision'] == 6)) {
-                    $cryptFiltersDic = \Smalot\PdfParser\RawData\RawDataParser::getHeaderValue($headerDic, 'CF', '<<');
-                    $this->metadata['streamFilter'] = \Smalot\PdfParser\RawData\RawDataParser::getHeaderValue($headerDic, 'StmF', '/');
-                    $this->metadata['stringFilter'] = \Smalot\PdfParser\RawData\RawDataParser::getHeaderValue($headerDic, 'StrF', '/');
+                    $cryptFiltersDic = RawDataParser::getHeaderValue($headerDic, 'CF', '<<');
+                    $this->metadata['streamFilter'] = RawDataParser::getHeaderValue($headerDic, 'StmF', '/');
+                    $this->metadata['stringFilter'] = RawDataParser::getHeaderValue($headerDic, 'StrF', '/');
                     if (!empty($cryptFiltersDic) && is_string($this->metadata['streamFilter']) && is_string($this->metadata['stringFilter']) && $this->metadata['streamFilter'] == $this->metadata['stringFilter']) {
                         if ($this->metadata['streamFilter'] == "Identity") {
                             // no encryption on streams or strings
@@ -138,13 +134,13 @@ class Info
                         } else {
                             // Find required crypt filter and its crypt filter method
                             // and update metadata accordingly
-                            $cryptFilterInfoDic = \Smalot\PdfParser\RawData\RawDataParser::getHeaderValue($cryptFiltersDic, $this->metadata['streamFilter'], '<<');
-                            $method = \Smalot\PdfParser\RawData\RawDataParser::getHeaderValue($cryptFilterInfoDic, 'CFM', '/');
+                            $cryptFilterInfoDic = RawDataParser::getHeaderValue($cryptFiltersDic, $this->metadata['streamFilter'], '<<');
+                            $method = RawDataParser::getHeaderValue($cryptFilterInfoDic, 'CFM', '/');
                             switch ($method) {
                                 case 'V2':
                                     $this->metadata['version'] = 2;
                                     $this->metadata['revision'] = 3;
-                                    $this->metadata['cfLength'] = (int)\Smalot\PdfParser\RawData\RawDataParser::getHeaderValue($cryptFilterInfoDic, 'Length', 'numeric', -1);
+                                    $this->metadata['cfLength'] = (int)RawDataParser::getHeaderValue($cryptFilterInfoDic, 'Length', 'numeric', -1);
                                     if ($this->metadata['cfLength'] != 0) {
                                         //~ according to the spec, this should be cfLength / 8
                                         $this->fileKeyLength = $this->metadata['cfLength'];
@@ -155,7 +151,7 @@ class Info
                                     $this->metadata['version'] = 2;
                                     $this->metadata['revision'] = 3;
                                     $this->encAlgorithm = 'AES';
-                                    $this->metadata['cfLength'] = (int)\Smalot\PdfParser\RawData\RawDataParser::getHeaderValue($cryptFilterInfoDic, 'Length', 'numeric', -1);
+                                    $this->metadata['cfLength'] = (int)RawDataParser::getHeaderValue($cryptFilterInfoDic, 'Length', 'numeric', -1);
                                     if ($this->metadata['cfLength'] != 0) {
                                         //~ according to the spec, this should be cfLength / 8
                                         $this->fileKeyLength = $this->metadata['cfLength'];
@@ -166,7 +162,7 @@ class Info
                                     $this->metadata['version'] = 5;
                                     // let $this->metadata['revision'] be 5 or 6
                                     $this->encAlgorithm = 'AES256';
-                                    $this->metadata['cfLength'] = (int)\Smalot\PdfParser\RawData\RawDataParser::getHeaderValue($cryptFilterInfoDic, 'Length', 'numeric', -1);
+                                    $this->metadata['cfLength'] = (int)RawDataParser::getHeaderValue($cryptFilterInfoDic, 'Length', 'numeric', -1);
                                     if ($this->metadata['cfLength'] != 0) {
                                         //~ according to the spec, this should be cfLengthArr / 8
                                         $this->fileKeyLength = $this->metadata['cfLength'];
@@ -178,7 +174,7 @@ class Info
                             }
                         }
                     }
-                    $this->metadata['encryptMetadata'] = (\Smalot\PdfParser\RawData\RawDataParser::getHeaderValue($headerDic, 'EncryptMetadata', 'boolean') === "true");
+                    $this->metadata['encryptMetadata'] = (RawDataParser::getHeaderValue($headerDic, 'EncryptMetadata', 'boolean') === "true");
                 }
                 if ($this->metadata['version'] >= 1 && $this->metadata['version'] <= 2 && $this->metadata['revision'] >= 2 && $this->metadata['revision'] <= 3) {
                     if ($this->fileKeyLength > 16 || $this->fileKeyLength < 0) {
@@ -202,6 +198,10 @@ class Info
             }
         } else {
             throw new SyntaxError("Weird encryption info");
+        }
+
+        if ($this->encAlgorithm == 'RC4') {
+            $this->context = new RC4();
         }
     }
 
@@ -293,4 +293,20 @@ class Info
     {
         return $this->fileKeyLength;
     }
+
+
+    /**
+     * Extra context, e.g. decryption helpers, that are needed for both key
+     * generation and stream decryption.
+     */
+    public function getContext()
+    {
+        return $this->context;
+    }
 }
+
+
+# vim: set tabstop=4 shiftwidth=4 :
+# Local Variables:
+# tab-width: 4
+# end:

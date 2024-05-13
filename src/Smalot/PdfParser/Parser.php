@@ -102,12 +102,8 @@ class Parser
         // Create structure from raw data.
         list($xref, $data) = $this->rawDataParser->parseData($content);
 
-        if (isset($xref['trailer']['encrypt']) && false === $this->config->getIgnoreEncryption()) {
-            throw new \Exception('Secured pdf file are currently not supported.');
-        }
-
         if (empty($data)) {
-            throw new \Exception('Object list not found. Possible secured file.');
+            throw new \Exception('Object list not found.');
         }
 
         // Create destination object.

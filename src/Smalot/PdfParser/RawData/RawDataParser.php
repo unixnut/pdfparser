@@ -1010,7 +1010,7 @@ class RawDataParser
         $fileKey = \Smalot\PdfParser\Encryption\FileKey::generate($this->encryptionInfo);
 
         $this->decryptionHelper = \Smalot\PdfParser\Encryption\Stream::make(
-            $this->encryptionInfo->getEncAlgorithm(), $fileKey);
+            $this->encryptionInfo, $fileKey);
     }
 
     /**

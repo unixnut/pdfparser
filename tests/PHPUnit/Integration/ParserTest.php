@@ -404,23 +404,6 @@ class ParserTest extends TestCase
         $this->assertTrue('' !== $document->getText());
     }
 
-    /**
-     * Tests handling of encrypted PDF.
-     *
-     * @see https://github.com/smalot/pdfparser/pull/653
-     */
-    public function testNoIgnoreEncryption(): void
-    {
-        $filename = $this->rootDir.'/samples/not_really_encrypted.pdf';
-        $threw = false;
-        try {
-            (new Parser([]))->parseFile($filename);
-        } catch (\Exception $e) {
-            // we expect an exception to be thrown if an encrypted PDF is encountered.
-            $threw = true;
-        }
-        $this->assertTrue($threw);
-    }
 
     /**
      * Tests behavior if encryption is ignored.

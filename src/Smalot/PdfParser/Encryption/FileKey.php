@@ -1,17 +1,6 @@
 <?php
 
 /**
- * This file is based on code of tecnickcom/TCPDF PDF library.
- *
- * Original author Nicola Asuni (info@tecnick.com) and
- * contributors (https://github.com/tecnickcom/TCPDF/graphs/contributors).
- *
- * @see https://github.com/tecnickcom/TCPDF
- *
- * Original code was licensed on the terms of the LGPL v3.
- *
- * ------------------------------------------------------------------------------
- *
  * @file This file is part of the PdfParser library.
  *
  * @author  Alastair Irvine <alastair@plug.org.au>
@@ -103,6 +92,8 @@ class OldFileKey extends FileKey
     {
         parent::__construct($info);
 
+        $this->rc4 = $info->getContext();
+
         $passwordPaddingBytes = [ 0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41, 0x64, 0x00, 0x4e, 0x56, 0xff, 0xfa, 0x01, 0x08, 0x2e, 0x2e, 0x00, 0xb6, 0xd0, 0x68, 0x3e, 0x80, 0x2f, 0x0c, 0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a ];
         $this->passwordPadding = \implode(\array_map("chr", $passwordPaddingBytes));
 
@@ -117,6 +108,9 @@ class OldFileKey extends FileKey
             $this->userPassword = $userPassword;
         }
 
+        // If there is an owner password, it can be used to obtain the user
+        // password.  Don't just set the latter because there need to be two
+        // testFileKey() calls and an exception thrown if the latter fails.
         if (!\is_null($this->ownerPassword)) {
             $password = $this->decryptPassword($this->ownerPassword);
             $this->fileKey = $this->makeFileKeyOld($password);
@@ -129,7 +123,7 @@ class OldFileKey extends FileKey
 
         // If owner password was invalid, try user password
         if (\is_null($this->fileKey)) {
-            $password = \is_null($this->userPassword) ? "" : $this->userPassword;
+            $password = $this->userPassword ?? "";
             $this->fileKey = $this->makeFileKeyOld($password);
             if (!$this->testFileKey($this->fileKey))
                 throw new InvalidPassword();
@@ -152,8 +146,9 @@ class OldFileKey extends FileKey
 
         switch ($this->info->getRevision()) {
             case 2:
-                // Try to decrypt the hashed user password and see if matches the padding string
-                return \openssl_decrypt($this->info->getOwnerKey(), "RC4-40", $hash, OPENSSL_RAW_DATA | OPENSSL_NO_PADDING);
+                // Try to decrypt the "owner key" (encrypted user password)
+                // using the hashed user password as a key
+                return $this->rc4->decrypt($this->info->getOwnerKey(), $hash);
                 break;
 
             case 3:
@@ -196,7 +191,7 @@ class OldFileKey extends FileKey
         switch ($this->info->getRevision()) {
             case 2:
                 // Try to decrypt the hashed user password and see if matches the padding string
-                $plaintext = \openssl_decrypt($this->info->getUserKey(), "RC4-40", $key, OPENSSL_RAW_DATA | OPENSSL_NO_PADDING);
+                $plaintext = $this->rc4->decrypt($this->info->getUserKey(), $key);
                 return $plaintext === $this->passwordPadding;
                 break;
 
@@ -226,7 +221,7 @@ class OldFileKey extends FileKey
                 function($c) use ($i) { return \chr(\ord($c) ^ $i); },
                 \str_split($key)
             ));
-            $data = \openssl_decrypt($data, "RC4-40", $roundKey, OPENSSL_RAW_DATA | OPENSSL_NO_PADDING);
+            $data = $this->rc4->decrypt($data, $roundKey);
         }
         return $data;
     }
@@ -281,7 +276,7 @@ class NewFileKey extends FileKey
         if (\is_null($passwordHash)) {
             $mainKey = $this->info->getUserKey();
             $additionalKey = "";
-            $password = \is_null($this->userPassword) ? "" : $this->userPassword;
+            $password = $this->userPassword ?? "";
             $encryptedFileKey = $this->info->getUserEnc();
             $passwordHash = $this->hashPassword($password, $mainKey, $additionalKey);
             if (!$this->testPasswordHash($passwordHash, $mainKey)) {

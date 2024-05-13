@@ -1,17 +1,6 @@
 <?php
 
 /**
- * This file is based on code of tecnickcom/TCPDF PDF library.
- *
- * Original author Nicola Asuni (info@tecnick.com) and
- * contributors (https://github.com/tecnickcom/TCPDF/graphs/contributors).
- *
- * @see https://github.com/tecnickcom/TCPDF
- *
- * Original code was licensed on the terms of the LGPL v3.
- *
- * ------------------------------------------------------------------------------
- *
  * @file This file is part of the PdfParser library.
  *
  * @author  Alastair Irvine <alastair@plug.org.au>
@@ -47,7 +36,7 @@ namespace Smalot\PdfParser\Encryption;
  */
 abstract class Stream
 {
-    function __construct($key)
+    function __construct(string $key)
     {
         $this->key = $key;
     }
@@ -69,18 +58,18 @@ abstract class Stream
     /**
      * Object factory that instantiates the relevant subclass.
      *
-     * @param string $algorithm
-     * @param        $key file key consisting of byte string of the relevant number of characters
+     * @param $info   Encryption metadata
+     * @param $key    File key consisting of byte string of the relevant number of characters
      *
      * @return Stream subclass
      *
-     * @throws InvalidAlgorithm if $algorithm is invalid
+     * @throws InvalidAlgorithm if $info's algorithm is invalid
      */
-    public static function make(string $algorithm, string $key)
+    public static function make(Info $info, string $key)
     {
-        switch ($algorithm) {
+        switch ($info->getEncAlgorithm()) {
             case 'RC4':
-                return new RC4Stream($key);
+                return new RC4Stream($key, $info->getContext());
                 break;
 
             case 'AES':
@@ -100,6 +89,18 @@ abstract class Stream
 
 class RC4Stream extends Stream
 {
+    /**
+     * @param        $key       Key consisting of byte string of the relevant number of characters
+     * @param        $context   Encryption context
+     */
+    function __construct(string $key, RC4 $context)
+    {
+        parent::__construct($key);
+
+        $this->rc4 = $context;
+    }
+
+
     public function decrypt(string $cyphertext, int $num, int $gen)
     {
         // 32 bytes minus 5 bytes of salting
@@ -109,7 +110,7 @@ class RC4Stream extends Stream
             $key = $this->key;
         }
         //# printf("%d_%d\n", $num, $gen);
-        return \openssl_decrypt($cyphertext, "RC4-40", $key, OPENSSL_RAW_DATA | OPENSSL_NO_PADDING);
+        return $this->rc4->decrypt($cyphertext, $key);
     }
 
 
